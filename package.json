@@ -1,0 +1,28 @@
+{
+  "name": "@merrymake/service",
+  "version": "3.0.4",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/merrymake/typescript-service-library.git"
+  },
+  "bugs": {
+    "url": "https://github.com/merrymake/typescript-service-library/issues"
+  },
+  "homepage": "https://github.com/merrymake/typescript-service-library#readme",
+  "dependencies": {
+    "@merrymake/ext2mime": "^1.0.3",
+    "@types/node": "^20.4.7",
+    "axios": "^1.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
