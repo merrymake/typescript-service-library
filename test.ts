@@ -13,6 +13,7 @@ async function foo(pbp: PayloadBufferPromise, env: Envelope) {
   let p = pb.toString();
   let mid = env.messageId;
   let tid = env.traceId;
+  let sid = env.sessionId;
   postToRapids("$reply", { content: "String", mime: MIME_TYPES.txt });
   postToRapids("custom");
   postToRapids("custom", { content: "String", mime: MIME_TYPES.txt });

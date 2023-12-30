@@ -12,9 +12,10 @@ import {
   type PayloadBufferPromise,
   MIME_TYPES,
   replyToOrigin,
+  Envelope,
 } from "@merrymake/service";
 
-async function handleHello(payloadBufferPromise: PayloadBufferPromise) {
+async function handleHello(payloadBufferPromise: PayloadBufferPromise, envelope: Envelope) {
   let payloadBuffer = await payloadBufferPromise;
   let payload = payloadBuffer.toString();
   replyToOrigin(`Hello, ${payload}!`, MIME_TYPES.txt);
