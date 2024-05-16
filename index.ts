@@ -21,7 +21,6 @@ export module PayloadTypes {
     passthrough: T;
   }
 }
-export type PayloadBufferPromise = Promise<Buffer>;
 
 type Handler = (payloadBuffer: Buffer, envelope: Envelope) => void;
 
@@ -124,7 +123,7 @@ export function postToRapids(
 // ): Promise<RapidsResponse>;
 export function postToRapids(
   event: string,
-  payload?: { content: any; mime: MimeType<string, string> }
+  payload?: { content: any; mime: MimeType<string, string> } | string | Buffer
 ): Promise<RapidsResponse>;
 /**
  * Post an event to the central message queue (Rapids), with a payload and its content type.
@@ -180,9 +179,9 @@ export function postToRapids(event: string, payload?: any) {
  */
 export function replyToOrigin(
   content: any,
-  headers: { contentType: MimeType<string, string> }
+  contentType: MimeType<string, string>
 ) {
-  return postToRapids("$reply", { content, headers });
+  return postToRapids("$reply", { content, headers: { contentType } });
 }
 /**
  * Send a file back to the originator of the trace.
@@ -200,7 +199,7 @@ export async function replyFileToOrigin(
         ? mime
         : optimisticMimeTypeOf(path.substring(path.lastIndexOf(".") + 1));
     if (realMime === null) throw "Unknown file type. Add mimeType argument.";
-    await replyToOrigin(await fs.readFile(path), { contentType: realMime });
+    await replyToOrigin(await fs.readFile(path), realMime);
   } catch (e) {
     throw e;
   }

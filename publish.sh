@@ -1,5 +1,6 @@
 tsc
+npm publish --otp=$1
 git add .
 git commit -m "Deploy"
-npm publish --otp=$1
+git push origin HEAD
 

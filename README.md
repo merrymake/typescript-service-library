@@ -4,7 +4,7 @@ This is the official Typescript service library for Merrymake. It defines all th
 
 ## Usage
 
-Here is the most basic example of how to use this library: 
+Here is the most basic example of how to use this library:
 
 ```ts
 import {
@@ -15,8 +15,7 @@ import {
   Envelope,
 } from "@merrymake/service";
 
-async function handleHello(payloadBufferPromise: PayloadBufferPromise, envelope: Envelope) {
-  let payloadBuffer = await payloadBufferPromise;
+async function handleHello(payloadBuffer: Buffer, envelope: Envelope) {
   let payload = payloadBuffer.toString();
   replyToOrigin(`Hello, ${payload}!`, MIME_TYPES.txt);
 }

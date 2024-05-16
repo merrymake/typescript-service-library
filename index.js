@@ -91,8 +91,8 @@ exports.postToRapids = postToRapids;
  * @param content        the payload
  * @param mime           the content type of the payload
  */
-function replyToOrigin(content, headers) {
-    return postToRapids("$reply", { content, headers });
+function replyToOrigin(content, contentType) {
+    return postToRapids("$reply", { content, headers: { contentType } });
 }
 exports.replyToOrigin = replyToOrigin;
 /**
@@ -108,7 +108,7 @@ async function replyFileToOrigin(path, mime) {
             : (0, ext2mime_1.optimisticMimeTypeOf)(path.substring(path.lastIndexOf(".") + 1));
         if (realMime === null)
             throw "Unknown file type. Add mimeType argument.";
-        await replyToOrigin(await promises_1.default.readFile(path), { contentType: realMime });
+        await replyToOrigin(await promises_1.default.readFile(path), realMime);
     }
     catch (e) {
         throw e;

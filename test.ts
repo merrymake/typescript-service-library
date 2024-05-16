@@ -1,7 +1,6 @@
 import {
   Envelope,
   MIME_TYPES,
-  PayloadBufferPromise,
   merrymakeService,
   postToRapids,
   replyFileToOrigin,
@@ -15,9 +14,9 @@ async function foo(pb: Buffer, env: Envelope) {
   let sid = env.sessionId;
   postToRapids("$reply", { content: "String", mime: MIME_TYPES.txt });
   postToRapids("custom");
-  postToRapids("custom", { content: "String", mime: MIME_TYPES.txt });
-  replyToOrigin("String", { contentType: MIME_TYPES.txt });
-  replyToOrigin({ msg: "Hello" }, { contentType: MIME_TYPES.json });
+  postToRapids("custom", "String");
+  replyToOrigin("String", MIME_TYPES.txt);
+  replyToOrigin({ msg: "Hello" }, MIME_TYPES.json);
   replyFileToOrigin("index.html");
 }
 
