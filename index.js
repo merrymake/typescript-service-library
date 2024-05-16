@@ -7,6 +7,8 @@ exports.MIME_TYPES = exports.broadcastToChannel = exports.joinChannel = exports.
 const ext2mime_1 = require("@merrymake/ext2mime");
 const axios_1 = __importDefault(require("axios"));
 const promises_1 = __importDefault(require("fs/promises"));
+const net_1 = __importDefault(require("net"));
+let tcp = false;
 /**
  * This is the root call for a Merrymake service.
  *
@@ -14,14 +16,31 @@ const promises_1 = __importDefault(require("fs/promises"));
  * @param init Used to define code to run after deployment but before release. Useful for smoke tests or database consolidation. Similar to an 'init container'
  */
 async function merrymakeService(handlers, init) {
-    const action = process.argv[process.argv.length - 2];
-    const handler = handlers[action];
-    if (handler !== undefined) {
-        const envelope = JSON.parse(process.argv[process.argv.length - 1]);
-        handler(getPayload(), envelope);
+    try {
+        if (process.argv.length === 2) {
+            tcp = true;
+            const [action, envelope, payload] = await getActionAndPayload();
+            const handler = handlers[action];
+            if (handler !== undefined)
+                await handler(payload, envelope);
+            else if (init !== undefined)
+                await init();
+        }
+        else {
+            const action = process.argv[process.argv.length - 2];
+            const handler = handlers[action];
+            if (handler !== undefined) {
+                const envelope = JSON.parse(process.argv[process.argv.length - 1]);
+                handler(await getPayload(), envelope);
+            }
+            else if (init !== undefined)
+                await init();
+        }
     }
-    else if (init !== undefined)
-        await init();
+    catch (e) {
+        console.error(e);
+        process.exit(1);
+    }
 }
 exports.merrymakeService = merrymakeService;
 /**
@@ -31,13 +50,38 @@ exports.merrymakeService = merrymakeService;
  * @param payload     the payload with content type
  */
 function postToRapids(event, payload) {
-    if (payload !== undefined) {
-        return axios_1.default.post(`${process.env.RAPIDS}/${event}`, payload.content, {
-            headers: { "Content-Type": payload.mime.toString() },
+    if (tcp === true) {
+        if (event === "$reply") {
+            payload.headers.contentType = payload.headers.contentType.toString();
+        }
+        const packed = pack(Buffer.from(event), Buffer.from(Buffer.isBuffer(payload)
+            ? payload
+            : payload instanceof Object
+                ? JSON.stringify(payload)
+                : payload || ""));
+        const client = new net_1.default.Socket();
+        const [host, port] = process.env.RAPIDS.split(":");
+        client.connect(+port, host, async () => {
+            client.write(packed);
+            client.end();
         });
     }
     else {
-        return axios_1.default.post(`${process.env.RAPIDS}/${event}`);
+        if (payload !== undefined) {
+            if (payload.headers !== undefined)
+                return axios_1.default.post(`${process.env.RAPIDS}/${event}`, payload.content, {
+                    headers: { "Content-Type": payload.headers.contentType.toString() },
+                });
+            else
+                return axios_1.default.post(`${process.env.RAPIDS}/${event}`, payload, {
+                    headers: {
+                        "Content-Type": payload instanceof Object ? "application/json" : "text/plain",
+                    },
+                });
+        }
+        else {
+            return axios_1.default.post(`${process.env.RAPIDS}/${event}`);
+        }
     }
 }
 exports.postToRapids = postToRapids;
@@ -47,8 +91,8 @@ exports.postToRapids = postToRapids;
  * @param content        the payload
  * @param mime           the content type of the payload
  */
-function replyToOrigin(content, mime) {
-    return postToRapids("$reply", { content, mime });
+function replyToOrigin(content, headers) {
+    return postToRapids("$reply", { content, headers });
 }
 exports.replyToOrigin = replyToOrigin;
 /**
@@ -64,10 +108,7 @@ async function replyFileToOrigin(path, mime) {
             : (0, ext2mime_1.optimisticMimeTypeOf)(path.substring(path.lastIndexOf(".") + 1));
         if (realMime === null)
             throw "Unknown file type. Add mimeType argument.";
-        await postToRapids("$reply", {
-            content: await promises_1.default.readFile(path),
-            mime: realMime,
-        });
+        await replyToOrigin(await promises_1.default.readFile(path), { contentType: realMime });
     }
     catch (e) {
         throw e;
@@ -82,10 +123,7 @@ exports.replyFileToOrigin = replyFileToOrigin;
  * @param channel        the channel to join
  */
 function joinChannel(channel) {
-    return postToRapids("$join", {
-        content: channel,
-        mime: ext2mime_1.COMMON_MIME_TYPES.txt[0],
-    });
+    return postToRapids("$join", channel);
 }
 exports.joinChannel = joinChannel;
 /**
@@ -96,10 +134,7 @@ exports.joinChannel = joinChannel;
  * @param payload   the payload of the message
  */
 function broadcastToChannel(to, event, payload) {
-    return postToRapids("$broadcast", {
-        content: { to, event, payload },
-        mime: ext2mime_1.COMMON_MIME_TYPES.json[0],
-    });
+    return postToRapids("$broadcast", { to, event, payload });
 }
 exports.broadcastToChannel = broadcastToChannel;
 // export function sendToClient(to: string, event: string, payload: any) {
@@ -148,6 +183,36 @@ function getPayload() {
         });
         process.stdin.on("end", () => {
             resolve(Buffer.concat(bufs));
+        });
+    });
+}
+function numberToBuffer(n) {
+    return Buffer.from([n >> 16, n >> 8, n >> 0]);
+}
+function bufferToNumber(bufs) {
+    return (bufs.at(0) << 16) | (bufs.at(1) << 8) | bufs.at(2);
+}
+function pack(...bufs) {
+    const result = [];
+    bufs.forEach((x) => result.push(numberToBuffer(x.length), x));
+    return Buffer.concat(result);
+}
+function parseValue(buffer) {
+    const len = bufferToNumber(buffer);
+    return [buffer.subarray(3, len + 3), buffer.subarray(len + 3)];
+}
+function getActionAndPayload() {
+    return new Promise((resolve, reject) => {
+        const bufs = [];
+        process.stdin.on("data", (data) => {
+            bufs.push(data);
+        });
+        process.stdin.on("end", () => {
+            const buffer1 = Buffer.concat(bufs);
+            const [action, buffer2] = parseValue(buffer1);
+            const [envelope, buffer3] = parseValue(buffer2);
+            const [payload, buffer4] = parseValue(buffer3);
+            resolve([action.toString(), JSON.parse(envelope.toString()), payload]);
         });
     });
 }

@@ -8,8 +8,7 @@ import {
   replyToOrigin,
 } from ".";
 
-async function foo(pbp: PayloadBufferPromise, env: Envelope) {
-  let pb = await pbp.then((x) => x);
+async function foo(pb: Buffer, env: Envelope) {
   let p = pb.toString();
   let mid = env.messageId;
   let tid = env.traceId;
@@ -17,8 +16,8 @@ async function foo(pbp: PayloadBufferPromise, env: Envelope) {
   postToRapids("$reply", { content: "String", mime: MIME_TYPES.txt });
   postToRapids("custom");
   postToRapids("custom", { content: "String", mime: MIME_TYPES.txt });
-  replyToOrigin("String", MIME_TYPES.txt);
-  replyToOrigin({ msg: "Hello" }, MIME_TYPES.json);
+  replyToOrigin("String", { contentType: MIME_TYPES.txt });
+  replyToOrigin({ msg: "Hello" }, { contentType: MIME_TYPES.json });
   replyFileToOrigin("index.html");
 }
 

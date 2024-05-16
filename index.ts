@@ -5,6 +5,7 @@ import {
 } from "@merrymake/ext2mime";
 import axios, { AxiosResponse } from "axios";
 import fs from "fs/promises";
+import net from "net";
 
 export module PayloadTypes {
   export interface UploadFileInfo<T> {
@@ -22,10 +23,7 @@ export module PayloadTypes {
 }
 export type PayloadBufferPromise = Promise<Buffer>;
 
-type Handler = (
-  payloadBuffer: PayloadBufferPromise,
-  envelope: Envelope
-) => void;
+type Handler = (payloadBuffer: Buffer, envelope: Envelope) => void;
 
 export type Envelope = {
   /**
@@ -47,6 +45,8 @@ export type Envelope = {
   sessionId?: string;
 };
 
+let tcp = false;
+
 /**
  * This is the root call for a Merrymake service.
  *
@@ -57,34 +57,41 @@ export async function merrymakeService(
   handlers: { [action: string]: Handler | undefined },
   init?: () => Promise<void>
 ) {
-  const action = process.argv[process.argv.length - 2];
-  const handler = handlers[action];
-  if (handler !== undefined) {
-    const envelope: Envelope = JSON.parse(
-      process.argv[process.argv.length - 1]
-    );
-    handler(getPayload(), envelope);
-  } else if (init !== undefined) await init();
+  try {
+    if (process.argv.length === 2) {
+      tcp = true;
+      const [action, envelope, payload] = await getActionAndPayload();
+      const handler = handlers[action];
+      if (handler !== undefined) await handler(payload, envelope);
+      else if (init !== undefined) await init();
+    } else {
+      const action = process.argv[process.argv.length - 2];
+      const handler = handlers[action];
+      if (handler !== undefined) {
+        const envelope: Envelope = JSON.parse(
+          process.argv[process.argv.length - 1]
+        );
+        handler(await getPayload(), envelope);
+      } else if (init !== undefined) await init();
+    }
+  } catch (e) {
+    console.error(e);
+    process.exit(1);
+  }
 }
 
 type RapidsResponse = AxiosResponse<any, any>;
 export function postToRapids(
   event: "$reply",
-  payload: { content: any; mime: MimeType<string, string> }
+  payload: { content: any; headers: { contentType: MimeType<string, string> } }
 ): Promise<RapidsResponse>;
 export function postToRapids(
   event: "$join",
-  payload: {
-    content: string;
-    mime: MimeType<"text", "plain">;
-  }
+  payload: string
 ): Promise<RapidsResponse>;
 export function postToRapids(
   event: "$broadcast",
-  payload: {
-    content: { to: string; event: string; payload: any };
-    mime: MimeType<"application", "json">;
-  }
+  payload: { to: string; event: string; payload: any }
 ): Promise<RapidsResponse>;
 // export function postToRapids(
 //   event: "$send",
@@ -125,16 +132,43 @@ export function postToRapids(
  * @param event       the event to post
  * @param payload     the payload with content type
  */
-export function postToRapids(
-  event: string,
-  payload?: { content: any; mime: MimeType<string, string> }
-) {
-  if (payload !== undefined) {
-    return axios.post(`${process.env.RAPIDS}/${event}`, payload.content, {
-      headers: { "Content-Type": payload.mime.toString() },
+export function postToRapids(event: string, payload?: any) {
+  if (tcp === true) {
+    if (event === "$reply") {
+      payload.headers.contentType = payload.headers.contentType.toString();
+    }
+    const packed = pack(
+      Buffer.from(event),
+      Buffer.from(
+        Buffer.isBuffer(payload)
+          ? payload
+          : payload instanceof Object
+          ? JSON.stringify(payload)
+          : payload || ""
+      )
+    );
+    const client = new net.Socket();
+    const [host, port] = process.env.RAPIDS!.split(":");
+    client.connect(+port, host, async () => {
+      client.write(packed);
+      client.end();
     });
   } else {
-    return axios.post(`${process.env.RAPIDS}/${event}`);
+    if (payload !== undefined) {
+      if (payload.headers !== undefined)
+        return axios.post(`${process.env.RAPIDS}/${event}`, payload.content, {
+          headers: { "Content-Type": payload.headers.contentType.toString() },
+        });
+      else
+        return axios.post(`${process.env.RAPIDS}/${event}`, payload, {
+          headers: {
+            "Content-Type":
+              payload instanceof Object ? "application/json" : "text/plain",
+          },
+        });
+    } else {
+      return axios.post(`${process.env.RAPIDS}/${event}`);
+    }
   }
 }
 
@@ -144,8 +178,11 @@ export function postToRapids(
  * @param content        the payload
  * @param mime           the content type of the payload
  */
-export function replyToOrigin(content: any, mime: MimeType<string, string>) {
-  return postToRapids("$reply", { content, mime });
+export function replyToOrigin(
+  content: any,
+  headers: { contentType: MimeType<string, string> }
+) {
+  return postToRapids("$reply", { content, headers });
 }
 /**
  * Send a file back to the originator of the trace.
@@ -163,10 +200,7 @@ export async function replyFileToOrigin(
         ? mime
         : optimisticMimeTypeOf(path.substring(path.lastIndexOf(".") + 1));
     if (realMime === null) throw "Unknown file type. Add mimeType argument.";
-    await postToRapids("$reply", {
-      content: await fs.readFile(path),
-      mime: realMime,
-    });
+    await replyToOrigin(await fs.readFile(path), { contentType: realMime });
   } catch (e) {
     throw e;
   }
@@ -180,10 +214,7 @@ export async function replyFileToOrigin(
  * @param channel        the channel to join
  */
 export function joinChannel(channel: string) {
-  return postToRapids("$join", {
-    content: channel,
-    mime: COMMON_MIME_TYPES.txt[0],
-  });
+  return postToRapids("$join", channel);
 }
 /**
  * Broadcast a message (event and payload) to all listeners in a channel.
@@ -193,10 +224,7 @@ export function joinChannel(channel: string) {
  * @param payload   the payload of the message
  */
 export function broadcastToChannel(to: string, event: string, payload: string) {
-  return postToRapids("$broadcast", {
-    content: { to, event, payload },
-    mime: COMMON_MIME_TYPES.json[0],
-  });
+  return postToRapids("$broadcast", { to, event, payload });
 }
 // export function sendToClient(to: string, event: string, payload: any) {
 //   return postToRapids("$send", {
@@ -245,6 +273,38 @@ function getPayload() {
     });
     process.stdin.on("end", () => {
       resolve(Buffer.concat(bufs));
+    });
+  });
+}
+
+function numberToBuffer(n: number) {
+  return Buffer.from([n >> 16, n >> 8, n >> 0]);
+}
+function bufferToNumber(bufs: Buffer) {
+  return (bufs.at(0)! << 16) | (bufs.at(1)! << 8) | bufs.at(2)!;
+}
+function pack(...bufs: Buffer[]) {
+  const result: Buffer[] = [];
+  bufs.forEach((x) => result.push(numberToBuffer(x.length), x));
+  return Buffer.concat(result);
+}
+function parseValue(buffer: Buffer) {
+  const len = bufferToNumber(buffer);
+  return [buffer.subarray(3, len + 3), buffer.subarray(len + 3)];
+}
+
+function getActionAndPayload() {
+  return new Promise<[string, Envelope, Buffer]>((resolve, reject) => {
+    const bufs: Buffer[] = [];
+    process.stdin.on("data", (data: Buffer) => {
+      bufs.push(data);
+    });
+    process.stdin.on("end", () => {
+      const buffer1 = Buffer.concat(bufs);
+      const [action, buffer2] = parseValue(buffer1);
+      const [envelope, buffer3] = parseValue(buffer2);
+      const [payload, buffer4] = parseValue(buffer3);
+      resolve([action.toString(), JSON.parse(envelope.toString()), payload]);
     });
   });
 }
