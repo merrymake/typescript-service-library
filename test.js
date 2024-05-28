@@ -9,9 +9,8 @@ async function foo(pb, env) {
     (0, _1.postToRapids)("$reply", { content: "String", mime: _1.MIME_TYPES.txt });
     (0, _1.postToRapids)("custom");
     (0, _1.postToRapids)("custom", "String");
-    (0, _1.replyToOrigin)("String", _1.MIME_TYPES.txt);
-    (0, _1.replyToOrigin)({ msg: "Hello" }, _1.MIME_TYPES.json);
-    (0, _1.replyFileToOrigin)("index.html");
+    (0, _1.replyToOrigin)("String", { contentType: _1.MIME_TYPES.txt });
+    (0, _1.replyToOrigin)({ msg: "Hello" }, { contentType: _1.MIME_TYPES.json });
 }
 (0, _1.merrymakeService)({
     foo,

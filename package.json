@@ -1,6 +1,6 @@
 {
   "name": "@merrymake/service",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -19,8 +19,7 @@
   "homepage": "https://github.com/merrymake/typescript-service-library#readme",
   "dependencies": {
     "@merrymake/ext2mime": "^1.0.3",
-    "@types/node": "^20.4.7",
-    "axios": "^1.4.0"
+    "@types/node": "^20.4.7"
   },
   "publishConfig": {
     "access": "public"

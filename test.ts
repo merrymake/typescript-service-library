@@ -1,11 +1,15 @@
-import {
-  Envelope,
-  MIME_TYPES,
-  merrymakeService,
-  postToRapids,
-  replyFileToOrigin,
-  replyToOrigin,
-} from ".";
+import { merrymakeService, MIME_TYPES, replyToOrigin, Envelope } from ".";
+
+async function handleHello(payloadBuffer: Buffer, envelope: Envelope) {
+  let payload = payloadBuffer.toString();
+  replyToOrigin(`Hello, ${payload}!`, { contentType: MIME_TYPES.txt });
+}
+
+merrymakeService({
+  handleHello,
+});
+
+import { postToRapids } from ".";
 
 async function foo(pb: Buffer, env: Envelope) {
   let p = pb.toString();
@@ -15,9 +19,8 @@ async function foo(pb: Buffer, env: Envelope) {
   postToRapids("$reply", { content: "String", mime: MIME_TYPES.txt });
   postToRapids("custom");
   postToRapids("custom", "String");
-  replyToOrigin("String", MIME_TYPES.txt);
-  replyToOrigin({ msg: "Hello" }, MIME_TYPES.json);
-  replyFileToOrigin("index.html");
+  replyToOrigin("String", { contentType: MIME_TYPES.txt });
+  replyToOrigin({ msg: "Hello" }, { contentType: MIME_TYPES.json });
 }
 
 merrymakeService(

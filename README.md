@@ -9,7 +9,6 @@ Here is the most basic example of how to use this library:
 ```ts
 import {
   merrymakeService,
-  type PayloadBufferPromise,
   MIME_TYPES,
   replyToOrigin,
   Envelope,
@@ -17,7 +16,7 @@ import {
 
 async function handleHello(payloadBuffer: Buffer, envelope: Envelope) {
   let payload = payloadBuffer.toString();
-  replyToOrigin(`Hello, ${payload}!`, MIME_TYPES.txt);
+  replyToOrigin(`Hello, ${payload}!`, { contentType: MIME_TYPES.txt });
 }
 
 merrymakeService({
