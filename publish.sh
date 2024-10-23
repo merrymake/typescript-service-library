@@ -1,3 +1,4 @@
+npm update
 tsc
 npm publish --otp=$1
 git add .

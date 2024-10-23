@@ -14,12 +14,12 @@ const net_1 = __importDefault(require("net"));
  */
 async function merrymakeService(handlers, init) {
     try {
-        const [action, envelope, payload] = await getActionAndPayload();
+        const [action, envelope, payload] = await getActionAndPayload().then();
         const handler = handlers[action];
         if (handler !== undefined)
-            await handler(payload, envelope);
+            handler(payload, envelope);
         else if (init !== undefined)
-            await init();
+            await init().then();
     }
     catch (e) {
         console.error(e);

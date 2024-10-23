@@ -34,10 +34,10 @@ export async function merrymakeService(
   init?: () => Promise<void>
 ) {
   try {
-    const [action, envelope, payload] = await getActionAndPayload();
+    const [action, envelope, payload] = await getActionAndPayload().then();
     const handler = handlers[action];
-    if (handler !== undefined) await handler(payload, envelope);
-    else if (init !== undefined) await init();
+    if (handler !== undefined) handler(payload, envelope);
+    else if (init !== undefined) await init().then();
   } catch (e) {
     console.error(e);
     process.exit(1);
@@ -46,7 +46,10 @@ export async function merrymakeService(
 
 export function postToRapids(
   event: "$reply",
-  payload: { content: any; headers: { contentType: MimeType<string, string> } }
+  payload: {
+    content: string | Buffer;
+    headers: { contentType: MimeType<string, string> };
+  }
 ): Promise<void>;
 export function postToRapids(
   event: string,
@@ -90,7 +93,7 @@ export function postToRapids(event: string, payload?: any) {
  * @param mime           the content type of the payload
  */
 export function replyToOrigin(
-  content: any,
+  content: string | Buffer,
   headers: { contentType: MimeType<string, string> }
 ) {
   return postToRapids("$reply", { content, headers });
