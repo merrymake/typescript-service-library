@@ -57,7 +57,9 @@ export type Envelope = {
    */
   sessionId?: string;
   /**
-   * (Optional) Any custom HTTP headers passed to trigger this event
+   * (Optional) If this is the first service in the trace, this will hold any unusual HTTP headers from the triggering HTTP call.
+   *
+   * _Note_: Always lowercase.
    */
   headers?: { [key: string]: string };
 };
