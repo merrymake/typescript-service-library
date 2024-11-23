@@ -8,15 +8,17 @@ Here is the most basic example of how to use this library:
 
 ```ts
 import {
+  ContentType,
   merrymakeService,
-  MIME_TYPES,
   replyToOrigin,
-  Envelope,
 } from "@merrymake/service";
 
-async function handleHello(payloadBuffer: Buffer, envelope: Envelope) {
+async function handleHello(payloadBuffer: Buffer) {
   let payload = payloadBuffer.toString();
-  replyToOrigin(`Hello, ${payload}!`, { contentType: MIME_TYPES.txt });
+  replyToOrigin({
+    content: `Hello, ${payload}!`,
+    "content-type": ContentType.text,
+  });
 }
 
 merrymakeService({

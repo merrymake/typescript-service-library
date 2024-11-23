@@ -1,31 +1,39 @@
 import {
   merrymakeService,
-  MIME_TYPES,
   replyToOrigin,
   Envelope,
   postToRapids,
+  ContentType,
 } from "./index";
-
-async function handleHello(payloadBuffer: Buffer, envelope: Envelope) {
-  let payload = payloadBuffer.toString();
-  replyToOrigin(`Hello, ${payload}!`, { contentType: MIME_TYPES.txt });
-}
-
-merrymakeService({
-  handleHello,
-});
+import fs from "fs";
 
 async function foo(pb: Buffer, env: Envelope) {
   let p = pb.toString();
   let mid = env.messageId;
   let tid = env.traceId;
   let sid = env.sessionId;
-  postToRapids("$reply", { content: "String", mime: MIME_TYPES.txt });
+  let headers = env.headers && env.headers["x-discord"];
+  postToRapids("$reply", {
+    content: "String",
+    "content-type": ContentType.text,
+  });
   postToRapids("custom");
   postToRapids("custom", "String");
-  replyToOrigin("String", { contentType: MIME_TYPES.txt });
-  replyToOrigin(JSON.stringify({ msg: "Hello" }), {
-    contentType: MIME_TYPES.json,
+  replyToOrigin({
+    content: "String",
+    "content-type": ContentType.text,
+  });
+  replyToOrigin({
+    content: JSON.stringify({ msg: "Hello" }),
+    "content-type": ContentType.text,
+    "status-code": 5,
+    headers: { chr: "abc" },
+  });
+  replyToOrigin({
+    content: fs.readFileSync("meme.png"),
+    "content-type": ContentType.png,
+    "status-code": 201,
+    headers: { "custom-header": "is cool" },
   });
 }
 

@@ -1,7 +1,7 @@
-npm update
-tsc
-npm publish --otp=$1
-git add .
-git commit -m "Deploy"
-git push origin HEAD
+npm update \
+  && tsc \
+  && npm publish --otp=$1 \
+  && git add . \
+  && git commit -m "Release" \
+  && git push origin HEAD
 
