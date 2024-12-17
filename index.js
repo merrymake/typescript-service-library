@@ -3,11 +3,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.broadcastToChannel = exports.joinChannel = exports.replyToOrigin = exports.postToRapids = exports.merrymakeService = exports.ContentType = void 0;
+exports.ContentType = void 0;
+exports.merrymakeService = merrymakeService;
+exports.postToRapids = postToRapids;
+exports.replyToOrigin = replyToOrigin;
+exports.joinChannel = joinChannel;
+exports.broadcastToChannel = broadcastToChannel;
 const net_1 = __importDefault(require("net"));
 class ContentType {
     kind;
     name;
+    // Videos
+    static avi = new ContentType("video", "x-msvideo");
+    static mp4 = new ContentType("video", "mp4");
     // Images
     static gif = new ContentType("image", "gif");
     static jpeg = new ContentType("image", "jpeg");
@@ -20,6 +28,10 @@ class ContentType {
     static json = new ContentType("application", "json");
     static text = new ContentType("text", "plain");
     static xml = new ContentType("application", "xml");
+    // Data
+    static gz = new ContentType("application", "gzip");
+    static tar = new ContentType("application", "x-tar");
+    static zip = new ContentType("application", "zip");
     // Unknown
     static raw = new ContentType("application", "octet-stream");
     constructor(kind, name) {
@@ -178,7 +190,6 @@ async function merrymakeService(handlers, init) {
         process.exit(1);
     }
 }
-exports.merrymakeService = merrymakeService;
 /**
  * Post an event to the central message queue (Rapids), with a payload and its content type.
  *
@@ -188,7 +199,6 @@ exports.merrymakeService = merrymakeService;
 function postToRapids(event, payload) {
     return environment.post(event, payload);
 }
-exports.postToRapids = postToRapids;
 /**
  * Post a reply back to the user who triggered this trace. The payload is sent
  * back using HTTP and therefore requires a content-type. For strings and json
@@ -220,7 +230,6 @@ function replyToOrigin(payload) {
     };
     return postToRapids("$reply", postPayload);
 }
-exports.replyToOrigin = replyToOrigin;
 /**
  * Subscribe to a channel, so events will stream back messages broadcast to that
  * channel. You can join multiple channels. You stay in the channel until the
@@ -234,7 +243,6 @@ exports.replyToOrigin = replyToOrigin;
 function joinChannel(channel) {
     postToRapids("$join", channel);
 }
-exports.joinChannel = joinChannel;
 /**
  * Broadcast a message (event and payload) to all listeners in a channel.
  *
@@ -243,4 +251,3 @@ exports.joinChannel = joinChannel;
 function broadcastToChannel(msg) {
     postToRapids("$broadcast", msg);
 }
-exports.broadcastToChannel = broadcastToChannel;

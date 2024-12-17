@@ -6,11 +6,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const index_1 = require("./index");
 const fs_1 = __importDefault(require("fs"));
 async function foo(pb, env) {
-    let p = pb.toString();
-    let mid = env.messageId;
-    let tid = env.traceId;
-    let sid = env.sessionId;
-    let headers = env.headers && env.headers["x-discord"];
+    const p = pb.toString();
+    const mid = env.messageId;
+    const tid = env.traceId;
+    const sid = env.sessionId;
+    const headers = env.headers && env.headers["x-discord"];
     (0, index_1.postToRapids)("$reply", {
         content: "String",
         "content-type": index_1.ContentType.text,
@@ -19,11 +19,9 @@ async function foo(pb, env) {
     (0, index_1.postToRapids)("custom", "String");
     (0, index_1.replyToOrigin)({
         content: "String",
-        "content-type": index_1.ContentType.text,
     });
     (0, index_1.replyToOrigin)({
-        content: JSON.stringify({ msg: "Hello" }),
-        "content-type": index_1.ContentType.text,
+        content: { msg: "Hello" },
         "status-code": 5,
         headers: { chr: "abc" },
     });
@@ -33,6 +31,12 @@ async function foo(pb, env) {
         "status-code": 201,
         headers: { "custom-header": "is cool" },
     });
+    // Should fail
+    // replyToOrigin({
+    //   content: fs.readFileSync("meme.png"),
+    //   "status-code": 201,
+    //   headers: { "custom-header": "is cool" },
+    // });
 }
 (0, index_1.merrymakeService)({
     foo,

@@ -8,11 +8,11 @@ import {
 import fs from "fs";
 
 async function foo(pb: Buffer, env: Envelope) {
-  let p = pb.toString();
-  let mid = env.messageId;
-  let tid = env.traceId;
-  let sid = env.sessionId;
-  let headers = env.headers && env.headers["x-discord"];
+  const p = pb.toString();
+  const mid = env.messageId;
+  const tid = env.traceId;
+  const sid = env.sessionId;
+  const headers = env.headers && env.headers["x-discord"];
   postToRapids("$reply", {
     content: "String",
     "content-type": ContentType.text,
@@ -21,11 +21,9 @@ async function foo(pb: Buffer, env: Envelope) {
   postToRapids("custom", "String");
   replyToOrigin({
     content: "String",
-    "content-type": ContentType.text,
   });
   replyToOrigin({
-    content: JSON.stringify({ msg: "Hello" }),
-    "content-type": ContentType.text,
+    content: { msg: "Hello" },
     "status-code": 5,
     headers: { chr: "abc" },
   });
@@ -35,6 +33,13 @@ async function foo(pb: Buffer, env: Envelope) {
     "status-code": 201,
     headers: { "custom-header": "is cool" },
   });
+
+  // Should fail
+  // replyToOrigin({
+  //   content: fs.readFileSync("meme.png"),
+  //   "status-code": 201,
+  //   headers: { "custom-header": "is cool" },
+  // });
 }
 
 merrymakeService(

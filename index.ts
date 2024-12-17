@@ -1,6 +1,9 @@
 import net from "net";
 
 export class ContentType {
+  // Videos
+  static readonly avi = new ContentType("video", "x-msvideo");
+  static readonly mp4 = new ContentType("video", "mp4");
   // Images
   static readonly gif = new ContentType("image", "gif");
   static readonly jpeg = new ContentType("image", "jpeg");
@@ -13,6 +16,10 @@ export class ContentType {
   static readonly json = new ContentType("application", "json");
   static readonly text = new ContentType("text", "plain");
   static readonly xml = new ContentType("application", "xml");
+  // Data
+  static readonly gz = new ContentType("application", "gzip");
+  static readonly tar = new ContentType("application", "x-tar");
+  static readonly zip = new ContentType("application", "zip");
   // Unknown
   static readonly raw = new ContentType("application", "octet-stream");
 
@@ -31,7 +38,11 @@ type ReplyPayload = {
       "content-type": ContentType;
     }
   | {
-      content: undefined | null | string | object;
+      content:
+        | undefined
+        | null
+        | string
+        | Record<symbol | number | string, unknown>;
       "content-type"?: ContentType;
     }
 );
@@ -57,7 +68,7 @@ export type Envelope = {
    */
   sessionId?: string;
   /**
-   * (Optional) If this is the first service in the trace, this will hold any unusual HTTP headers from the triggering HTTP call.
+   * (Optional) Holds any unusual HTTP headers from the triggering HTTP call.
    *
    * _Note_: Always lowercase.
    */
