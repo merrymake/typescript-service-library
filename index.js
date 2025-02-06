@@ -3,13 +3,111 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ContentType = void 0;
+exports.ContentType = exports.Log = void 0;
 exports.merrymakeService = merrymakeService;
 exports.postToRapids = postToRapids;
 exports.replyToOrigin = replyToOrigin;
 exports.joinChannel = joinChannel;
 exports.broadcastToChannel = broadcastToChannel;
+exports.processFanIn = processFanIn;
 const net_1 = __importDefault(require("net"));
+const LOG_INDENT = parseInt(process.env["LOG_INDENT"] || "2");
+const JSON_PRINTER = LOG_INDENT === 0
+    ? (o) => JSON.stringify(o)
+    : (o) => JSON.stringify(o, null, LOG_INDENT);
+var LogLevel;
+(function (LogLevel) {
+    LogLevel[LogLevel["Silly"] = 0] = "Silly";
+    LogLevel[LogLevel["Verbose"] = 1] = "Verbose";
+    LogLevel[LogLevel["Debug"] = 2] = "Debug";
+    LogLevel[LogLevel["Info"] = 3] = "Info";
+    LogLevel[LogLevel["Success"] = 4] = "Success";
+    LogLevel[LogLevel["Warning"] = 5] = "Warning";
+    LogLevel[LogLevel["Failure"] = 6] = "Failure";
+    LogLevel[LogLevel["Silent"] = 7] = "Silent";
+})(LogLevel || (LogLevel = {}));
+const level = process.env.LOG_LEVEL !== undefined
+    ? [
+        "silly",
+        "verbose",
+        "debug",
+        "info",
+        "success",
+        "warning",
+        "error",
+        "silent",
+    ].indexOf(process.env.LOG_LEVEL.toLowerCase())
+    : process.env.SILLY?.toLowerCase() === "true"
+        ? LogLevel.Silly
+        : process.env.VERBOSE?.toLowerCase() === "true"
+            ? LogLevel.Verbose
+            : process.env.DEBUG?.toLowerCase() === "true"
+                ? LogLevel.Debug
+                : process.env.INFO?.toLowerCase() === "true"
+                    ? LogLevel.Info
+                    : process.env.SUCCESS?.toLowerCase() === "true"
+                        ? LogLevel.Success
+                        : process.env.WARNING?.toLowerCase() === "true"
+                            ? LogLevel.Warning
+                            : process.env.FAILURE?.toLowerCase() === "true"
+                                ? LogLevel.Failure
+                                : process.env.SILENT?.toLowerCase() === "true"
+                                    ? LogLevel.Silent
+                                    : -1;
+class Logger {
+    print(st, obj) {
+        if (obj !== "")
+            st.write(typeof obj === "string"
+                ? obj
+                : typeof obj === "number"
+                    ? obj.toString()
+                    : JSON_PRINTER(obj));
+        return this;
+    }
+    normal(obj) {
+        return this.print(process.stdout, obj);
+    }
+    newline(obj = "") {
+        return this.normal(obj).normal("\n");
+    }
+    printCode(st, c) {
+        return (obj) => this.print(st, c).print(st, obj).print(st, "\x1b[0m");
+    }
+    printCodeNewline(st, c) {
+        return (obj) => this.print(st, c).print(st, obj).print(st, "\x1b[0m\n");
+    }
+    black = this.printCode(process.stdout, "\x1b[30m");
+    red = this.printCode(process.stdout, "\x1b[31m");
+    green = this.printCode(process.stdout, "\x1b[32m");
+    yellow = this.printCode(process.stdout, "\x1b[33m");
+    blue = this.printCode(process.stdout, "\x1b[34m");
+    purple = this.printCode(process.stdout, "\x1b[35m");
+    cyan = this.printCode(process.stdout, "\x1b[36m");
+    white = this.printCode(process.stdout, "\x1b[37m");
+    gray = this.printCode(process.stdout, "\x1b[90m");
+    silly = level <= LogLevel.Silly
+        ? this.printCodeNewline(process.stdout, "\x1b[90m")
+        : (o) => this;
+    verbose = level <= LogLevel.Verbose
+        ? this.printCodeNewline(process.stdout, "\x1b[37m")
+        : (o) => this;
+    debug = level <= LogLevel.Debug
+        ? this.printCodeNewline(process.stdout, "\x1b[35m")
+        : (o) => this;
+    info = level <= LogLevel.Info
+        ? this.printCodeNewline(process.stdout, "\x1b[34m")
+        : (o) => this;
+    succ = level <= LogLevel.Success
+        ? this.printCodeNewline(process.stdout, "\x1b[32m")
+        : (o) => this;
+    warn = level <= LogLevel.Warning
+        ? this.printCodeNewline(process.stderr, "\x1b[33m")
+        : (o) => this;
+    fail = level <= LogLevel.Failure
+        ? this.printCodeNewline(process.stderr, "\x1b[31m")
+        : (o) => this;
+}
+exports.Log = new Logger();
 class ContentType {
     kind;
     name;
@@ -60,63 +158,75 @@ function parseValue(buffer) {
 }
 function valueTo(value, map) {
     return value === null || value === undefined
-        ? map.isUndefined()
+        ? map.toUndefined()
         : Buffer.isBuffer(value)
-            ? map.isBuffer(value)
+            ? map.toBuffer(value)
             : typeof value === "string"
-                ? map.isString(value)
-                : map.isObject(value);
+                ? map.toString(value)
+                : Array.isArray(value)
+                    ? map.toArray(value)
+                    : map.toObject(value);
 }
 const to = {
     String: new (class {
-        isUndefined() {
+        toUndefined() {
             return "undefined";
         }
-        isBuffer(val) {
+        toBuffer(val) {
             return val.toString();
         }
-        isString(val) {
+        toString(val) {
             return val;
         }
-        isObject(val) {
+        toObject(val) {
+            return JSON.stringify(val);
+        }
+        toArray(val) {
             return JSON.stringify(val);
         }
     })(),
     Buffer: new (class {
-        isUndefined() {
+        toUndefined() {
             return Buffer.alloc(0);
         }
-        isBuffer(val) {
+        toBuffer(val) {
             return val;
         }
-        isString(val) {
+        toString(val) {
             return Buffer.from(val);
         }
-        isObject(val) {
+        toObject(val) {
+            return Buffer.from(JSON.stringify(val));
+        }
+        toArray(val) {
             return Buffer.from(JSON.stringify(val));
         }
     })(),
     ContentType: new (class {
-        isUndefined() {
+        toUndefined() {
             return undefined;
         }
-        isBuffer(val) {
+        toBuffer(val) {
             return ContentType.raw;
         }
-        isString(val) {
+        toString(val) {
             return ContentType.text;
         }
-        isObject(val) {
+        toObject(val) {
+            return ContentType.json;
+        }
+        toArray(val) {
             return ContentType.json;
         }
     })(),
 };
 function both(va, vb) {
     return {
-        isUndefined: () => [va.isUndefined(), vb.isUndefined()],
-        isBuffer: (val) => [va.isBuffer(val), vb.isBuffer(val)],
-        isString: (val) => [va.isString(val), vb.isString(val)],
-        isObject: (val) => [va.isObject(val), vb.isObject(val)],
+        toUndefined: () => [va.toUndefined(), vb.toUndefined()],
+        toBuffer: (val) => [va.toBuffer(val), vb.toBuffer(val)],
+        toString: (val) => [va.toString(val), vb.toString(val)],
+        toObject: (val) => [va.toObject(val), vb.toObject(val)],
+        toArray: (val) => [va.toArray(val), vb.toArray(val)],
     };
 }
 class RunningLocally {
@@ -139,7 +249,7 @@ class RunningInMerrymake {
             const bufs = [];
             process.addListener("SIGINT", () => {
                 if (bufs.length === 0) {
-                    console.log(`No input. If you want to run locally use:\n  node app handleHello "payload" '{ "messageId": "mId", "traceId": "tId", "sessionId": "sId", "headers": { "a": "1" } }'`);
+                    exports.Log.warn(`No input. If you want to run locally use:\n  node app handleHello "payload" '{ "messageId": "mId", "traceId": "tId", "sessionId": "sId", "headers": { "a": "1" } }'`);
                     process.exit(0);
                 }
             });
@@ -182,11 +292,13 @@ async function merrymakeService(handlers, init) {
         const handler = handlers[action];
         if (handler !== undefined)
             handler(payload, envelope);
+        else if (action.length > 0)
+            throw `Action '${action}' is not registered in merrymakeService`;
         else if (init !== undefined)
             await init().then();
     }
     catch (e) {
-        console.error(e);
+        exports.Log.fail(e);
         process.exit(1);
     }
 }
@@ -250,4 +362,13 @@ function joinChannel(channel) {
  */
 function broadcastToChannel(msg) {
     postToRapids("$broadcast", msg);
+}
+async function processFanIn(payloadBuffer, handlers) {
+    const toProcess = JSON.parse(payloadBuffer.toString());
+    for (let i = 0; i < toProcess.length; i++) {
+        const { event, payload } = toProcess[i];
+        const handler = handlers[event];
+        if (handler !== undefined)
+            await handler(Buffer.from(payload));
+    }
 }

@@ -1,5 +1,116 @@
 import net from "net";
 
+const LOG_INDENT = parseInt(process.env["LOG_INDENT"] || "2");
+const JSON_PRINTER =
+  LOG_INDENT === 0
+    ? (o: any) => JSON.stringify(o)
+    : (o: any) => JSON.stringify(o, null, LOG_INDENT);
+enum LogLevel {
+  Silly,
+  Verbose,
+  Debug,
+  Info,
+  Success,
+  Warning,
+  Failure,
+  Silent,
+}
+const level: LogLevel =
+  process.env.LOG_LEVEL !== undefined
+    ? [
+        "silly",
+        "verbose",
+        "debug",
+        "info",
+        "success",
+        "warning",
+        "error",
+        "silent",
+      ].indexOf(process.env.LOG_LEVEL.toLowerCase())
+    : process.env.SILLY?.toLowerCase() === "true"
+    ? LogLevel.Silly
+    : process.env.VERBOSE?.toLowerCase() === "true"
+    ? LogLevel.Verbose
+    : process.env.DEBUG?.toLowerCase() === "true"
+    ? LogLevel.Debug
+    : process.env.INFO?.toLowerCase() === "true"
+    ? LogLevel.Info
+    : process.env.SUCCESS?.toLowerCase() === "true"
+    ? LogLevel.Success
+    : process.env.WARNING?.toLowerCase() === "true"
+    ? LogLevel.Warning
+    : process.env.FAILURE?.toLowerCase() === "true"
+    ? LogLevel.Failure
+    : process.env.SILENT?.toLowerCase() === "true"
+    ? LogLevel.Silent
+    : -1;
+type LogInput = any;
+class Logger {
+  private print(st: NodeJS.WriteStream, obj: LogInput) {
+    if (obj !== "")
+      st.write(
+        typeof obj === "string"
+          ? obj
+          : typeof obj === "number"
+          ? obj.toString()
+          : JSON_PRINTER(obj)
+      );
+    return this;
+  }
+  normal(obj: LogInput) {
+    return this.print(process.stdout, obj);
+  }
+  newline(obj: LogInput = "") {
+    return this.normal(obj).normal("\n");
+  }
+  private printCode(st: NodeJS.WriteStream, c: string) {
+    return (obj: LogInput) =>
+      this.print(st, c).print(st, obj).print(st, "\x1b[0m");
+  }
+  private printCodeNewline(st: NodeJS.WriteStream, c: string) {
+    return (obj: LogInput) =>
+      this.print(st, c).print(st, obj).print(st, "\x1b[0m\n");
+  }
+  readonly black = this.printCode(process.stdout, "\x1b[30m");
+  readonly red = this.printCode(process.stdout, "\x1b[31m");
+  readonly green = this.printCode(process.stdout, "\x1b[32m");
+  readonly yellow = this.printCode(process.stdout, "\x1b[33m");
+  readonly blue = this.printCode(process.stdout, "\x1b[34m");
+  readonly purple = this.printCode(process.stdout, "\x1b[35m");
+  readonly cyan = this.printCode(process.stdout, "\x1b[36m");
+  readonly white = this.printCode(process.stdout, "\x1b[37m");
+  readonly gray = this.printCode(process.stdout, "\x1b[90m");
+  readonly silly =
+    level <= LogLevel.Silly
+      ? this.printCodeNewline(process.stdout, "\x1b[90m")
+      : (o: LogInput) => this;
+  readonly verbose =
+    level <= LogLevel.Verbose
+      ? this.printCodeNewline(process.stdout, "\x1b[37m")
+      : (o: LogInput) => this;
+  readonly debug =
+    level <= LogLevel.Debug
+      ? this.printCodeNewline(process.stdout, "\x1b[35m")
+      : (o: LogInput) => this;
+  readonly info =
+    level <= LogLevel.Info
+      ? this.printCodeNewline(process.stdout, "\x1b[34m")
+      : (o: LogInput) => this;
+  readonly succ =
+    level <= LogLevel.Success
+      ? this.printCodeNewline(process.stdout, "\x1b[32m")
+      : (o: LogInput) => this;
+  readonly warn =
+    level <= LogLevel.Warning
+      ? this.printCodeNewline(process.stderr, "\x1b[33m")
+      : (o: LogInput) => this;
+  readonly fail =
+    level <= LogLevel.Failure
+      ? this.printCodeNewline(process.stderr, "\x1b[31m")
+      : (o: LogInput) => this;
+}
+export const Log = new Logger();
+
 export class ContentType {
   // Videos
   static readonly avi = new ContentType("video", "x-msvideo");
@@ -42,10 +153,12 @@ type ReplyPayload = {
         | undefined
         | null
         | string
-        | Record<symbol | number | string, unknown>;
+        | Record<symbol | number | string, unknown>
+        | Array<unknown>;
       "content-type"?: ContentType;
     }
 );
+type Value = ReplyPayload["content"];
 
 type Handler = (payloadBuffer: Buffer, envelope: Envelope) => void;
 
@@ -92,64 +205,73 @@ function parseValue(buffer: Buffer) {
 }
 
 interface ValueMapper<T> {
-  isUndefined: () => T;
-  isBuffer: (buf: Buffer) => T;
-  isString: (buf: string) => T;
-  isObject: (buf: object) => T;
+  toUndefined: () => T;
+  toBuffer: (buf: Buffer) => T;
+  toString: (buf: string) => T;
+  toObject: (buf: Record<string | number | symbol, unknown>) => T;
+  toArray: (buf: Array<unknown>) => T;
 }
-function valueTo<T>(
-  value: undefined | null | Buffer | string | object,
-  map: ValueMapper<T>
-): T {
+function valueTo<T>(value: Value, map: ValueMapper<T>): T {
   return value === null || value === undefined
-    ? map.isUndefined()
+    ? map.toUndefined()
     : Buffer.isBuffer(value)
-    ? map.isBuffer(value)
+    ? map.toBuffer(value)
     : typeof value === "string"
-    ? map.isString(value)
-    : map.isObject(value);
+    ? map.toString(value)
+    : Array.isArray(value)
+    ? map.toArray(value)
+    : map.toObject(value);
 }
 
 const to = {
   String: new (class implements ValueMapper<string> {
-    isUndefined() {
+    toUndefined() {
       return "undefined";
     }
-    isBuffer(val: Buffer) {
+    toBuffer(val: Buffer) {
       return val.toString();
     }
-    isString(val: string) {
+    toString(val: string) {
       return val;
     }
-    isObject(val: object) {
+    toObject(val: object) {
+      return JSON.stringify(val);
+    }
+    toArray(val: Array<unknown>) {
       return JSON.stringify(val);
     }
   })(),
   Buffer: new (class implements ValueMapper<Buffer> {
-    isUndefined() {
+    toUndefined() {
       return Buffer.alloc(0);
     }
-    isBuffer(val: Buffer) {
+    toBuffer(val: Buffer) {
       return val;
     }
-    isString(val: string) {
+    toString(val: string) {
       return Buffer.from(val);
     }
-    isObject(val: object) {
+    toObject(val: object) {
+      return Buffer.from(JSON.stringify(val));
+    }
+    toArray(val: Array<unknown>) {
       return Buffer.from(JSON.stringify(val));
     }
   })(),
   ContentType: new (class implements ValueMapper<ContentType | undefined> {
-    isUndefined() {
+    toUndefined() {
       return undefined;
     }
-    isBuffer(val: Buffer) {
+    toBuffer(val: Buffer) {
       return ContentType.raw;
     }
-    isString(val: string) {
+    toString(val: string) {
       return ContentType.text;
     }
-    isObject(val: object) {
+    toObject(val: object) {
+      return ContentType.json;
+    }
+    toArray(val: Array<unknown>) {
       return ContentType.json;
     }
   })(),
@@ -159,20 +281,18 @@ function both<A, B>(
   vb: ValueMapper<B>
 ): ValueMapper<[A, B]> {
   return {
-    isUndefined: () => [va.isUndefined(), vb.isUndefined()],
-    isBuffer: (val) => [va.isBuffer(val), vb.isBuffer(val)],
-    isString: (val) => [va.isString(val), vb.isString(val)],
-    isObject: (val) => [va.isObject(val), vb.isObject(val)],
+    toUndefined: () => [va.toUndefined(), vb.toUndefined()],
+    toBuffer: (val) => [va.toBuffer(val), vb.toBuffer(val)],
+    toString: (val) => [va.toString(val), vb.toString(val)],
+    toObject: (val) => [va.toObject(val), vb.toObject(val)],
+    toArray: (val) => [va.toArray(val), vb.toArray(val)],
   };
 }
 
 interface Environment<T> {
   readonly contentMapper: ValueMapper<T>;
   getInput(): Promise<[string, Envelope, Buffer]>;
-  post(
-    event: string,
-    payload: undefined | null | Buffer | string | object
-  ): Promise<void>;
+  post(event: string, payload: Value): Promise<void>;
 }
 class RunningLocally implements Environment<string> {
   public readonly contentMapper = to.String;
@@ -183,10 +303,7 @@ class RunningLocally implements Environment<string> {
       process.argv.length > 3 ? Buffer.from(process.argv[3]) : Buffer.alloc(0),
     ];
   }
-  async post(
-    event: string,
-    payload: undefined | null | Buffer | string | object
-  ) {
+  async post(event: string, payload: Value) {
     console.log(event + ": " + valueTo(payload, to.String));
   }
 }
@@ -197,7 +314,7 @@ class RunningInMerrymake implements Environment<Buffer> {
       const bufs: Buffer[] = [];
       process.addListener("SIGINT", () => {
         if (bufs.length === 0) {
-          console.log(
+          Log.warn(
             `No input. If you want to run locally use:\n  node app handleHello "payload" '{ "messageId": "mId", "traceId": "tId", "sessionId": "sId", "headers": { "a": "1" } }'`
           );
           process.exit(0);
@@ -215,7 +332,7 @@ class RunningInMerrymake implements Environment<Buffer> {
       });
     });
   }
-  post(event: string, payload: undefined | null | Buffer | string | object) {
+  post(event: string, payload: Value) {
     const packed = pack(Buffer.from(event), valueTo(payload, to.Buffer));
     const client = new net.Socket();
     const [host, port] = process.env.RAPIDS!.split(":");
@@ -247,9 +364,11 @@ export async function merrymakeService(
     const [action, envelope, payload] = await environment.getInput();
     const handler = handlers[action];
     if (handler !== undefined) handler(payload, envelope);
+    else if (action.length > 0)
+      throw `Action '${action}' is not registered in merrymakeService`;
     else if (init !== undefined) await init().then();
   } catch (e) {
-    console.error(e);
+    Log.fail(e);
     process.exit(1);
   }
 }
@@ -260,10 +379,7 @@ export async function merrymakeService(
  * @param event       the event to post
  * @param payload     the payload with content type
  */
-export function postToRapids(
-  event: string,
-  payload?: object | string | Buffer
-) {
+export function postToRapids(event: string, payload?: Value) {
   return environment.post(event, payload);
 }
 
@@ -328,4 +444,20 @@ export function broadcastToChannel(msg: {
   payload: string;
 }) {
   postToRapids("$broadcast", msg);
+}
+
+export async function processFanIn(
+  payloadBuffer: Buffer,
+  handlers: {
+    [key: string]: (payloadBuffer: Buffer) => unknown | Promise<unknown>;
+  }
+) {
+  const toProcess: { event: string; payload: string }[] = JSON.parse(
+    payloadBuffer.toString()
+  );
+  for (let i = 0; i < toProcess.length; i++) {
+    const { event, payload } = toProcess[i];
+    const handler = handlers[event];
+    if (handler !== undefined) await handler(Buffer.from(payload));
+  }
 }
