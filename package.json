@@ -1,6 +1,6 @@
 {
   "name": "@merrymake/service",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -23,9 +23,6 @@
   },
   "devDependencies": {
     "@tsconfig/node-lts": "latest"
-  },
-  "optionalDependencies": {
-    "@merrymake/service": "file:/."
   },
   "publishConfig": {
     "access": "public"
