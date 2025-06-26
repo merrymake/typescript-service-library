@@ -10,6 +10,7 @@ exports.replyToOrigin = replyToOrigin;
 exports.joinChannel = joinChannel;
 exports.broadcastToChannel = broadcastToChannel;
 exports.processFanIn = processFanIn;
+const promises_1 = require("fs/promises");
 const net_1 = __importDefault(require("net"));
 const LOG_INDENT = parseInt(process.env["LOG_INDENT"] || "2");
 const JSON_PRINTER = LOG_INDENT === 0
@@ -286,21 +287,61 @@ const environment = process.argv.length > 2 ? new RunningLocally() : new Running
  * @param init Used to define code to run after deployment but before release.
  * Useful for smoke tests or database consolidation. Similar to an 'init container'
  */
-async function merrymakeService(handlers, init) {
-    try {
+function merrymakeService(handlers, init) {
+    (async () => {
         const [action, envelope, payload] = await environment.getInput();
         const handler = handlers[action];
         if (handler !== undefined)
-            handler(payload, envelope);
-        else if (action.length > 0)
-            throw `Action '${action}' is not registered in merrymakeService`;
-        else if (init !== undefined)
-            await init().then();
-    }
-    catch (e) {
-        exports.Log.fail(e);
-        process.exit(1);
-    }
+            await handler(payload, envelope);
+        else {
+            const merrymake_json = JSON.parse(await (0, promises_1.readFile)("merrymake.json", "utf-8"));
+            const unusedActions = new Set(Object.keys(handlers));
+            const unknownActions = [];
+            Object.entries(merrymake_json.hooks).forEach(([k, v]) => {
+                const action = typeof v !== "object" ? v : "action" in v ? v.action : k;
+                if (handlers[action] === undefined)
+                    unknownActions.push(action);
+                unusedActions.delete(action);
+            });
+            exports.Log.warn(`WARN: Unused actions in:
+merrymakeService({
+  ${[...unusedActions].map((s) => s + ",").join("\n  ")}
+});`);
+            if (unknownActions.length > 0)
+                throw `ERROR: Unknown actions in merrymake.json:
+- ${unknownActions.join("\n- ")}`;
+            if (init !== undefined)
+                await init().then();
+        }
+    })().catch((err) => {
+        if (err !== null &&
+            typeof err === "object" &&
+            "message" in err &&
+            "request" in err &&
+            "response" in err &&
+            err.request !== null &&
+            typeof err.request === "object" &&
+            "method" in err.request &&
+            "url" in err.request &&
+            err.response !== null &&
+            typeof err.response === "object" &&
+            "data" in err.response &&
+            "status" in err.response &&
+            "statusText" in err.response &&
+            "headers" in err.response) {
+            exports.Log.fail(`AXIOS ERROR: ${err.message}`);
+            exports.Log.fail({
+                url: `${err.request.method} ${err.request.url}`,
+                status: `${err.response.status} ${err.response.statusText}`,
+                headers: err.response.headers,
+                data: err.response.data,
+            });
+        }
+        else {
+            exports.Log.fail(err);
+        }
+        process.exitCode = 1;
+    });
 }
 /**
  * Post an event to the central message queue (Rapids), with a payload and its content type.
