@@ -313,7 +313,7 @@ class RunningLocally implements Environment<string> {
 }
 class RunningInMerrymake implements Environment<Buffer> {
   public readonly contentMapper = to.Buffer;
-  async getInput() {
+  getInput() {
     return new Promise<[string, Envelope, Buffer]>((resolve, reject) => {
       const bufs: Buffer[] = [];
       process.addListener("SIGINT", () => {
@@ -379,12 +379,13 @@ export function merrymakeService(
         if (handlers[action] === undefined) unknownActions.push(action);
         unusedActions.delete(action);
       });
-      Log.warn(
-        `WARN: Unused actions in:
+      if (unusedActions.size > 0)
+        Log.warn(
+          `WARN: Unused actions in:
 merrymakeService({
   ${[...unusedActions].map((s) => s + ",").join("\n  ")}
 });`
-      );
+        );
       if (unknownActions.length > 0)
         throw `ERROR: Unknown actions in merrymake.json:
 - ${unknownActions.join("\n- ")}`;

@@ -245,7 +245,7 @@ class RunningLocally {
 }
 class RunningInMerrymake {
     contentMapper = to.Buffer;
-    async getInput() {
+    getInput() {
         return new Promise((resolve, reject) => {
             const bufs = [];
             process.addListener("SIGINT", () => {
@@ -303,7 +303,8 @@ function merrymakeService(handlers, init) {
                     unknownActions.push(action);
                 unusedActions.delete(action);
             });
-            exports.Log.warn(`WARN: Unused actions in:
+            if (unusedActions.size > 0)
+                exports.Log.warn(`WARN: Unused actions in:
 merrymakeService({
   ${[...unusedActions].map((s) => s + ",").join("\n  ")}
 });`);
